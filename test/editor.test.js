@@ -33,12 +33,12 @@ test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async 
     await page.addStyleTag({ path: path.resolve(__dirname, '../media/dist/main.css') })
     await page.addScriptTag({ path: path.resolve(__dirname, '../media/dist/main.js') })
     const markdown = '# Foo & Bar\n\nFind **across** formatting.\n\n[Jump](#foo--bar-1)\n\n[Other](other.md#target)\n\n[Web](https://example.com)\n\n## Foo & Bar\n\n### Café 中文\n\n## Heading with [link](https://example.com)\n\nSetext heading\n--------------\n\n```md\n# Not a heading\n```\n'
-    async function init(mode = 'ir', theme = 'light') {
-      await page.evaluate(({ markdown, mode, theme }) => {
+    async function init(mode = 'ir', theme = 'light', appearance = { toolbarHidden: false, rawHtmlHidden: false }, content = markdown) {
+      await page.evaluate(({ content, mode, theme, appearance }) => {
         document.body.removeAttribute('data-vmd-ready')
-        window.postMessage({ command: 'update', type: 'init', content: markdown,
-          options: { mode }, theme, followLinksOnClick: true }, '*')
-      }, { markdown, mode, theme })
+        window.postMessage({ command: 'update', type: 'init', content,
+          options: { mode }, theme, followLinksOnClick: true, appearance }, '*')
+      }, { content, mode, theme, appearance })
       await page.waitForSelector('body[data-vmd-ready="1"]')
     }
     await init()
@@ -171,6 +171,86 @@ test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async 
     await moreMenu.click()
     await init('ir', 'light')
     assert.equal(await page.locator('.vmd-toolbar-overflow').count(), 1, 'Theme rebuild must not duplicate overflow controls')
+
+    await page.setViewportSize({ width: 1200, height: 800 })
+    await page.waitForTimeout(100)
+    const reset = page.locator('.vditor-ir .vditor-reset')
+    const beforeHidden = await page.evaluate(() => vditor.getValue())
+    assert.equal(await page.locator('.vditor-ir h1').evaluate(element => getComputedStyle(element, '::before').content), '"H1"')
+    await page.locator('#vmd-toolbar-visibility').click()
+    assert.equal(await page.locator('.vmd-toolbar').isVisible(), false)
+    assert.equal(await page.locator('.vmd-toolbar').evaluate(element => element.getBoundingClientRect().height), 0)
+    assert.equal(await page.locator('.vditor-ir h1').evaluate(element => getComputedStyle(element, '::before').content), 'none')
+    assert.equal(await reset.evaluate(element => getComputedStyle(element).paddingLeft), '12px')
+    assert.equal(await page.locator('#ln-gutter').isVisible(), false)
+    assert.equal(await page.locator('#vmd-toolbar-visibility').getAttribute('aria-label'), 'Show toolbar')
+    assert.equal(await page.locator('#vmd-toolbar-visibility').evaluate(element => element.getBoundingClientRect().width), 26)
+    await page.locator('#app').press('Control+f')
+    await page.waitForSelector('#vmd-search-bar.vmd-search-bar--open')
+    await page.locator('#vmd-search-input').fill('Café')
+    assert.equal(await page.locator('#vmd-search-count').textContent(), '1/1')
+    await page.locator('#vmd-search-input').press('Escape')
+    await page.setViewportSize({ width: 320, height: 800 })
+    await init('ir', 'dark', { toolbarHidden: true, rawHtmlHidden: false })
+    assert.equal(await page.locator('.vmd-toolbar').isVisible(), false, 'Hidden preference survives editor recreation')
+    assert.equal(await page.locator('#vmd-toolbar-visibility').count(), 1)
+    await page.locator('#vmd-toolbar-visibility').press('Enter')
+    await page.waitForTimeout(100)
+    assert.equal(await page.locator('.vmd-toolbar').isVisible(), true)
+    assert.ok(await page.locator('.vmd-toolbar').evaluate(element => element.getBoundingClientRect().height) <= 36)
+    assert.notEqual(await reset.evaluate(element => getComputedStyle(element).paddingLeft), '12px')
+    assert.equal(await page.evaluate(() => vditor.getValue()), beforeHidden)
+    assert.equal(await page.evaluate(() => window.messages.some(message =>
+      message.command === 'save-appearance' && message.appearance.toolbarHidden)), true)
+
+    const htmlContent = '# Heading\n\n<a id="custom-anchor"></a>\n\nVisible <span class="example">inline HTML</span> text.\n\n<div class="example">Rendered block</div>\n\n```html\n<div>Code example</div>\n```\n'
+    await page.setViewportSize({ width: 1200, height: 800 })
+    for (const mode of ['ir', 'wysiwyg', 'sv']) {
+      await init(mode, 'light', { toolbarHidden: false, rawHtmlHidden: false }, htmlContent)
+      const before = await page.evaluate(() => vditor.getValue())
+      const htmlButton = page.locator('.vmd-toolbar [data-type="raw-html"]')
+      await htmlButton.click()
+      assert.equal(await htmlButton.getAttribute('aria-pressed'), 'true')
+      if (mode !== 'sv') {
+        const rich = page.locator(`.vditor-${mode} .vditor-reset`)
+        assert.equal(await rich.locator('[data-type="html-inline"]').first().isVisible(), false)
+        assert.equal(await rich.locator('p.vmd-html-only').isVisible(), false)
+        assert.equal(await rich.locator('[data-type="html-block"] .example').isVisible(), true)
+        assert.equal(await rich.locator('[data-type="code-block"] > pre').last().isVisible(), true)
+        await page.locator('.vmd-toolbar [data-type="find"]').click()
+        await page.locator('#vmd-search-input').fill('custom-anchor')
+        assert.equal(await page.locator('#vmd-search-count').textContent(), '0/0')
+        await page.locator('#vmd-search-input').fill('inline HTML')
+        assert.equal(await page.locator('#vmd-search-count').textContent(), '1/1')
+        await page.locator('#vmd-search-input').press('Escape')
+        await page.evaluate(() => {
+          window.scrolled = []
+          window.postMessage({ command: 'scroll-to-heading', fragment: 'custom-anchor' }, '*')
+        })
+        await page.waitForTimeout(50)
+        assert.match(await page.evaluate(() => window.scrolled.at(-1)), /Visible.*inline HTML/)
+        assert.equal(await page.evaluate(() => vditor.getValue()), before)
+        const paragraph = rich.locator('p').filter({ hasText: /^Visible / })
+        await paragraph.click()
+        await page.keyboard.press('End')
+        await page.keyboard.type(' Addition.')
+        const edited = await page.evaluate(() => vditor.getValue())
+        assert.match(edited, /<a id="custom-anchor"><\/a>/)
+        assert.match(edited, /<span class="example">inline HTML<\/span>/)
+        assert.match(edited, /Addition\./)
+      } else {
+        assert.match(await page.locator('.vditor-sv').innerText(), /<a id="custom-anchor">/)
+        assert.equal(await page.evaluate(() => vditor.getValue()), before)
+      }
+      await htmlButton.click()
+      assert.equal(await htmlButton.getAttribute('aria-pressed'), 'false')
+      await init(mode, 'dark', { toolbarHidden: true, rawHtmlHidden: true }, htmlContent)
+      assert.equal(await page.locator('.vmd-toolbar').isVisible(), false)
+      if (mode !== 'sv') {
+        assert.equal(await page.locator(`.vditor-${mode} [data-type="html-inline"]`).first().isVisible(), false)
+        assert.equal(await page.locator(`.vditor-${mode} h1`).evaluate(element => getComputedStyle(element, '::before').content), 'none')
+      }
+    }
     assert.deepEqual(errors, [])
   } finally {
     await browser.close()

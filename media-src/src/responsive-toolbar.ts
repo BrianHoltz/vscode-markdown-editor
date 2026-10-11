@@ -21,6 +21,23 @@ export function initResponsiveToolbar(): () => void {
   tray.hidden = true
   overflow.append(toggle, tray)
   toolbar.appendChild(overflow)
+  document.getElementById('vmd-toolbar-visibility')?.remove()
+  const visibility = document.createElement('button')
+  visibility.id = 'vmd-toolbar-visibility'
+  visibility.type = 'button'
+  visibility.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v4H4zm0 7h4v7H4zm6 0h4v7h-4zm6 0h4v7h-4z" fill="currentColor"/></svg>'
+  visibility.setAttribute('aria-controls', 'vmd-main-toolbar')
+  toolbar.id = 'vmd-main-toolbar'
+  document.body.appendChild(visibility)
+  visibility.addEventListener('pointerdown', event => event.preventDefault())
+  visibility.addEventListener('click', () => {
+    const hiding = !document.body.classList.contains('vmd-toolbar-hidden')
+    close()
+    toggleAppearance('toolbarHidden')
+    if (hiding) vditor.focus()
+    else layout()
+  })
+  applyAppearance()
 
   function close(returnFocus = false) {
     tray.hidden = true
@@ -32,6 +49,7 @@ export function initResponsiveToolbar(): () => void {
   }
   const priority = ['save', 'find', 'more', 'edit-mode', 'headings', 'bold', 'link', 'italic']
   function layout() {
+    if (document.body.classList.contains('vmd-toolbar-hidden')) return
     const focused = document.activeElement
     controls.forEach(control => toolbar.insertBefore(control, overflow))
     overflow.hidden = true
@@ -106,5 +124,7 @@ export function initResponsiveToolbar(): () => void {
     mutation.disconnect()
     document.removeEventListener('pointerdown', outside, true)
     toolbar.removeEventListener('keydown', escape, true)
+    visibility.remove()
   }
 }
+import { applyAppearance, toggleAppearance } from './appearance'

@@ -20,6 +20,7 @@ import { fixTableIr } from './fix-table-ir'
 import { initSearch } from './search'
 import { publishOutline, scrollToHeading } from './headings'
 import { initResponsiveToolbar } from './responsive-toolbar'
+import { applyAppearance, initHtmlVisibility } from './appearance'
 import './main.css'
 
 // Set to true only for local debugging of scroll-position persistence; verbose and
@@ -215,6 +216,7 @@ function initVditor(msg) {
       fixTableIr()
       fixPanelHover()
       disposeToolbar = initResponsiveToolbar()
+      initHtmlVisibility()
       vditor.focus()
       // Initialize search bar once (idempotent across vditor re-inits)
       if (!(window as any).__vmdSearch) {
@@ -268,6 +270,7 @@ window.addEventListener('message', (e) => {
   // console.log('msg from vscode', msg)
   switch (msg.command) {
     case 'update': {
+      applyAppearance(msg.appearance)
       window.followLinksOnClick = msg.followLinksOnClick !== false
       if (msg.type === 'init') {
         if (msg.options && msg.options.useVscodeThemeColor) {

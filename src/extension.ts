@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import * as NodePath from 'path'
 import { MarkdownOutline } from './outline'
 const KeyVditorOptions = 'vditor.options'
+const KeyAppearance = 'markdown-editor.appearance'
 let outline: MarkdownOutline
 
 function debug(...args: any[]) {
@@ -84,7 +85,7 @@ export function activate(context: vscode.ExtensionContext) {
     )
   )
 
-  context.globalState.setKeysForSync([KeyVditorOptions])
+  context.globalState.setKeysForSync([KeyVditorOptions, KeyAppearance])
 }
 
 /**
@@ -423,6 +424,9 @@ class EditorPanel {
           case 'save-options':
             this._context.globalState.update(KeyVditorOptions, message.options)
             break
+          case 'save-appearance':
+            await this._context.globalState.update(KeyAppearance, message.appearance)
+            break
           case 'scroll':
             EditorPanel._scrollPositions.set(this._fsPath, message.top || 0)
             break
@@ -564,6 +568,7 @@ class EditorPanel {
     // const dir = NodePath.dirname(this._document.fileName)
     this._panel.webview.postMessage({
       command: 'update',
+      appearance: this._context.globalState.get(KeyAppearance),
       followLinksOnClick: EditorPanel.config.get<boolean>('followLinksOnClick') !== false,
       content: md,
       ...(props.type === 'init'
@@ -656,6 +661,7 @@ class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     const updateWebview = (props: { type?: 'init' | 'update'; options?: any; theme?: 'dark' | 'light' } = {}) => {
       webviewPanel.webview.postMessage({
         command: 'update',
+        appearance: this.context.globalState.get(KeyAppearance),
         followLinksOnClick: EditorPanel.config.get<boolean>('followLinksOnClick') !== false,
         content: document.getText(),
         ...(props.type === 'init'
@@ -718,6 +724,9 @@ class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
           break
         case 'save-options':
           this.context.globalState.update(KeyVditorOptions, message.options)
+          break
+        case 'save-appearance':
+          await this.context.globalState.update(KeyAppearance, message.appearance)
           break
         case 'scroll':
           EditorPanel._scrollPositions.set(uri.fsPath, message.top || 0)

@@ -25,7 +25,7 @@
 
 ## Local Markdown UX build
 
-The [BrianHoltz fork](https://github.com/BrianHoltz/vscode-markdown-editor), branch `brian/markdown-ux`, builds version `0.1.22-local.2` under the existing extension ID, `zaaack.markdown-editor`.
+The [BrianHoltz fork](https://github.com/BrianHoltz/vscode-markdown-editor), branch `brian/markdown-ux`, builds version `0.1.22-local.3` under the existing extension ID, `zaaack.markdown-editor`.
 
 - Vditor translations for supported editor locales are bundled with the extension; toolbar tooltips and submenu labels do not depend on CDN localization scripts.
 - **Markdown Outline** appears in the Explorer sidebar for both command-mode and "Open With" editors. It uses Vditor's Markdown parser, follows the heading hierarchy, updates after edits, and remains usable when focus moves to the sidebar. Clicking a heading scrolls the originating editor, including duplicate headings and headings containing inline formatting.
@@ -33,6 +33,8 @@ The [BrianHoltz fork](https://github.com/BrianHoltz/vscode-markdown-editor), bra
 - The toolbar and Cmd/Ctrl+F share one search bar. Search works in instant-rendering, WYSIWYG, and source modes, including matches across inline formatting. Browser highlights do not modify Markdown or the editable DOM.
 - Command-mode editors retain separate panels for separate documents. Theme and link-color overrides are included in source.
 - The toolbar stays a compact single row. Less-used tools move into a keyboard-accessible `»` overflow tray as the pane narrows; essential controls remain visible longest. Submenus open below the tray without horizontal clipping. The adapter in `media-src/src/responsive-toolbar.ts` moves Vditor's existing elements rather than duplicating command implementations, using ResizeObserver for pane changes.
+- The small upper-right toolbar button hides or restores the toolbar without reserving a row when hidden. H1-H6 and other margin annotations and the line-number gutter hide with it; rich-editor side padding shrinks to 12px. Cmd/Ctrl+F still works. Showing the toolbar restores the normal gutter and annotations.
+- The toolbar's **Hide raw HTML markup** button suppresses HTML tag syntax and empty HTML-only rows in rich editing modes. Rendered HTML blocks, their visible text, and fenced HTML examples remain visible; source mode always shows the complete source. Named HTML anchors remain navigable even when their raw markup is hidden. To edit hidden tags, show raw HTML again or switch to source mode. These view-only toggles do not modify Markdown; preferences persist across editor reopening and are included in VS Code Settings Sync.
 
 VS Code's built-in Outline has no public provider API for custom webview editors. Markdown Outline is a separate supported TreeView in Explorer, not a replacement for the built-in view.
 
@@ -51,15 +53,15 @@ npx --yes pnpm@10.32.1 build
 npx --yes pnpm@10.32.1 --filter media-src exec tsc --noEmit
 npx --yes pnpm@10.32.1 exec playwright install chromium
 npx --yes pnpm@10.32.1 test
-npx --yes --package @vscode/vsce vsce package --no-dependencies --out markdown-editor-0.1.22-local.2.vsix
+npx --yes --package @vscode/vsce vsce package --no-dependencies --out markdown-editor-0.1.22-local.3.vsix
 STAMP=$(date "+%Y%m%d.%a.%H%M")
-OUT="$HOME/Downloads/markdown-editor-0.1.22-local.2-$STAMP-toolbar.vsix"
-cp -p markdown-editor-0.1.22-local.2.vsix "$OUT"
-cmp markdown-editor-0.1.22-local.2.vsix "$OUT"
+OUT="$HOME/Downloads/markdown-editor-0.1.22-local.3-$STAMP-hideui.vsix"
+cp -p markdown-editor-0.1.22-local.3.vsix "$OUT"
+cmp markdown-editor-0.1.22-local.3.vsix "$OUT"
 code --install-extension "$OUT" --force
 ```
 
-Keep the canonical VSIX in the repository root, the normal `vsce package` output location. Copy each local build to `~/Downloads/` using `<product>-<version>-yyyymmdd.Dow.hhmm-<fix>.<ext>`; capture the timestamp immediately after successful packaging, and use a lowercase, hyphen-free fix label shorter than 10 characters. `toolbar` identifies the newest included fix in this build.
+Keep the canonical VSIX in the repository root, the normal `vsce package` output location. Copy each local build to `~/Downloads/` using `<product>-<version>-yyyymmdd.Dow.hhmm-<fix>.<ext>`; capture the timestamp immediately after successful packaging, and use a lowercase, hyphen-free fix label shorter than 10 characters. `hideui` identifies the newest included fix in this build.
 
 Reload VS Code with **Developer: Reload Window** after installation. Use the extension gear menu to disable auto-update for Markdown Editor if this local build should remain installed; a Marketplace update can replace it. Do not apply the legacy `patch-zaaack.py` script to this source build.
 

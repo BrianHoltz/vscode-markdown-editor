@@ -31,6 +31,10 @@ function findAllRanges(query: string, caseSensitive: boolean): Range[] {
       if (parent?.closest('[class*="vditor-ir__marker"], .vditor-panel, script, style')) {
         return NodeFilter.FILTER_REJECT
       }
+      if (document.body.classList.contains('vmd-raw-html-hidden')
+        && parent?.closest('[data-type="html-inline"], .vmd-html-only, [data-type="html-block"] > pre:not([class*="__preview"])')) {
+        return NodeFilter.FILTER_REJECT
+      }
       return NodeFilter.FILTER_ACCEPT
     },
   })
