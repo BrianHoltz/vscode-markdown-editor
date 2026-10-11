@@ -1,0 +1,178 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('fs')
+const path = require('path')
+const { chromium } = require('playwright')
+
+test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async () => {
+  const browser = await chromium.launch()
+  try {
+    const page = await browser.newPage()
+    const errors = []
+    page.on('pageerror', error => errors.push(error.message))
+    const vditorRoot = path.resolve(__dirname, '../media-src/node_modules/vditor')
+    await page.route('**/*', route => {
+      const url = new URL(route.request().url())
+      if (url.hostname === 'markdown-editor.test') {
+        return route.fulfill({ contentType: 'text/html', body: '<html><head></head><body><div id="app"></div></body></html>' })
+      }
+      const at = url.pathname.indexOf('/dist/')
+      if (at >= 0) {
+        const asset = path.join(vditorRoot, url.pathname.slice(at + 1))
+        if (fs.existsSync(asset)) {
+          return route.fulfill({ path: asset })
+        }
+      }
+      return route.abort()
+    })
+    await page.goto('http://markdown-editor.test')
+    await page.evaluate(() => {
+      window.messages = []
+      window.acquireVsCodeApi = () => ({ postMessage: message => window.messages.push(message) })
+    })
+    await page.addStyleTag({ path: path.resolve(__dirname, '../media/dist/main.css') })
+    await page.addScriptTag({ path: path.resolve(__dirname, '../media/dist/main.js') })
+    const markdown = '# Foo & Bar\n\nFind **across** formatting.\n\n[Jump](#foo--bar-1)\n\n[Other](other.md#target)\n\n[Web](https://example.com)\n\n## Foo & Bar\n\n### Café 中文\n\n## Heading with [link](https://example.com)\n\nSetext heading\n--------------\n\n```md\n# Not a heading\n```\n'
+    async function init(mode = 'ir', theme = 'light') {
+      await page.evaluate(({ markdown, mode, theme }) => {
+        document.body.removeAttribute('data-vmd-ready')
+        window.postMessage({ command: 'update', type: 'init', content: markdown,
+          options: { mode }, theme, followLinksOnClick: true }, '*')
+      }, { markdown, mode, theme })
+      await page.waitForSelector('body[data-vmd-ready="1"]')
+    }
+    await init()
+    assert.equal(await page.evaluate(() => window.VditorI18n.bold), 'Bold')
+    const headings = await page.evaluate(() => window.messages.filter(message => message.command === 'outline').at(-1).headings)
+    assert.deepEqual(headings.map(heading => heading.slug), ['foo--bar', 'foo--bar-1', 'café-中文', 'heading-with-link', 'setext-heading'])
+    const brokenLabels = await page.locator('.vditor-toolbar [aria-label]').evaluateAll(elements =>
+      elements.map(element => element.getAttribute('aria-label')).filter(label => /undefined/.test(label)))
+    assert.deepEqual(brokenLabels, [])
+    await page.locator('.vditor-toolbar [data-type="more"]').click()
+    await page.waitForTimeout(250)
+    assert.equal(await page.locator('.vditor-toolbar').evaluate(element => element.textContent.includes('undefined')), false)
+    await page.locator('.vditor-toolbar [data-type="markdown-outline"]').click()
+    assert.equal(await page.evaluate(() => window.messages.some(message => message.command === 'show-outline')), true)
+
+    await page.evaluate(() => {
+      window.scrolled = []
+      HTMLElement.prototype.scrollIntoView = function () { window.scrolled.push(this.textContent) }
+    })
+    await page.locator('.vditor-ir__link').filter({ hasText: /^Jump$/ }).click()
+    assert.equal(await page.evaluate(() => window.scrolled.at(-1).includes('Foo & Bar')), true)
+    await page.locator('.vditor-ir__link').filter({ hasText: /^Other$/ }).click()
+    await page.locator('.vditor-ir__link').filter({ hasText: /^Web$/ }).click()
+    assert.deepEqual(await page.evaluate(() => window.messages.filter(message => message.command === 'open-link').map(message => message.href)),
+      ['other.md#target', 'https://example.com'])
+    const beforeAltClick = await page.evaluate(() => window.messages.filter(message => message.command === 'open-link').length)
+    await page.locator('.vditor-ir__link').filter({ hasText: /^Other$/ }).click({ modifiers: ['Alt'] })
+    assert.equal(await page.evaluate(() => window.messages.filter(message => message.command === 'open-link').length), beforeAltClick)
+    await page.evaluate(() => { window.followLinksOnClick = false })
+    await page.locator('.vditor-ir__link').filter({ hasText: /^Other$/ }).click()
+    assert.equal(await page.evaluate(() => window.messages.filter(message => message.command === 'open-link').length), beforeAltClick)
+    await page.locator('.vditor-ir__link').filter({ hasText: /^Other$/ }).click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] })
+    assert.equal(await page.evaluate(() => window.messages.filter(message => message.command === 'open-link').length), beforeAltClick + 1)
+    await page.evaluate(() => window.postMessage({ command: 'scroll-to-heading', index: 2 }, '*'))
+    await page.waitForTimeout(50)
+    assert.match(await page.evaluate(() => window.scrolled.at(-1)), /Café 中文/)
+    await page.evaluate(() => window.postMessage({ command: 'scroll-to-heading', fragment: 'missing-heading' }, '*'))
+    await page.waitForTimeout(50)
+    assert.equal(await page.evaluate(() => window.messages.some(message => message.command === 'error' && message.content.includes('missing-heading'))), true)
+
+    for (const mode of ['ir', 'wysiwyg', 'sv']) {
+      await init(mode)
+      const before = await page.evaluate(() => vditor.getValue())
+      await page.locator('.vditor-toolbar [data-type="find"]').click()
+      await page.locator('#vmd-search-input').fill('formatting')
+      assert.equal(await page.locator('#vmd-search-count').textContent(), '1/1', mode)
+      await page.locator('#vmd-search-input').fill('FOO')
+      const total = mode === 'sv' ? 3 : 2
+      assert.equal(await page.locator('#vmd-search-count').textContent(), `1/${total}`, mode)
+      await page.locator('#vmd-search-next').click()
+      assert.equal(await page.locator('#vmd-search-count').textContent(), `2/${total}`, mode)
+      await page.locator('#vmd-search-case').check()
+      assert.equal(await page.locator('#vmd-search-count').textContent(), '0/0', mode)
+      await page.locator('#vmd-search-case').uncheck()
+      await page.locator('#vmd-search-close').click()
+      assert.equal(await page.evaluate(() => vditor.getValue()), before, mode)
+      await page.locator('#app').press('Control+f')
+      await page.waitForSelector('#vmd-search-bar.vmd-search-bar--open')
+      await page.locator('#vmd-search-input').fill('Find across formatting')
+      if (mode !== 'sv') assert.equal(await page.locator('#vmd-search-count').textContent(), '1/1', mode)
+      await page.locator('#vmd-search-input').press('Escape')
+      assert.equal(await page.locator('#vmd-search-bar').getAttribute('aria-hidden'), 'true')
+    }
+    await init('ir', 'dark')
+    await page.locator('.vditor-toolbar [data-type="find"]').click()
+    await page.locator('#vmd-search-input').fill('Café')
+    assert.equal(await page.locator('#vmd-search-count').textContent(), '1/1')
+    await page.locator('#vmd-search-close').click()
+
+    const extensionSource = fs.readFileSync(path.resolve(__dirname, '../src/extension.ts'), 'utf8')
+    const lineNumbers = extensionSource.match(/static lineNumberScript = `([\s\S]*?)`/)[1]
+    await page.addStyleTag({ content: lineNumbers.match(/<style>([\s\S]*?)<\/style>/)[1] })
+    await page.addScriptTag({ content: lineNumbers.match(/<script>([\s\S]*?)<\/script>/)[1] })
+    await page.waitForSelector('#ln-toggle')
+    await page.locator('#ln-toggle').click()
+    for (const width of [1200, 700, 450, 320, 240, 1200]) {
+      await page.setViewportSize({ width, height: 800 })
+      await page.waitForTimeout(100)
+      const geometry = await page.locator('.vmd-toolbar').evaluate(toolbar => {
+        const bounds = toolbar.getBoundingClientRect()
+        const buttons = Array.from(toolbar.children).filter(child =>
+          !child.hidden && getComputedStyle(child).display !== 'none')
+        return {
+          height: bounds.height,
+          width: bounds.width,
+          padding: getComputedStyle(toolbar).paddingLeft,
+          children: buttons.map(button => {
+            const rect = button.getBoundingClientRect()
+            return { top: rect.top - bounds.top, right: rect.right - bounds.left }
+          }),
+        }
+      })
+      assert.ok(geometry.height <= 36, `Toolbar must stay one row at ${width}px: ${geometry.height}px`)
+      assert.equal(geometry.padding, '6px', 'Line-number gutter must not pad the toolbar')
+      assert.ok(geometry.children.every(child => child.right <= geometry.width + 1), `No horizontal clipping at ${width}px`)
+      assert.ok(geometry.children.every(child => child.top < 10), `No wrapped controls at ${width}px`)
+      const toggle = page.locator('.vmd-toolbar-toggle')
+      if (await toggle.isVisible()) {
+        await toggle.click()
+        const tray = page.locator('.vmd-toolbar-tray')
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'true')
+        const trayBounds = await tray.boundingBox()
+        assert.ok(trayBounds.x >= 0 && trayBounds.x + trayBounds.width <= width + 1)
+        assert.ok(await tray.locator('.vditor-toolbar__item').count() > 0)
+        await toggle.press('Tab')
+        assert.equal(await tray.evaluate(tray => tray.contains(document.activeElement)), true)
+        await page.keyboard.press('Escape')
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'false')
+        assert.equal(await toggle.evaluate(toggle => document.activeElement === toggle), true)
+        await toggle.click()
+        await page.locator('#app').click({ position: { x: 10, y: 400 } })
+        assert.equal(await toggle.getAttribute('aria-expanded'), 'false')
+      }
+    }
+    await page.setViewportSize({ width: 320, height: 800 })
+    await page.waitForTimeout(100)
+    await page.locator('.vmd-toolbar-toggle').click()
+    const emoji = page.locator('.vmd-toolbar-tray [data-type="emoji"]')
+    await emoji.click()
+    const emojiPanel = page.locator('.vmd-toolbar-tray .vditor-panel').filter({ has: page.locator('.vditor-emojis') })
+    const emojiBounds = await emojiPanel.boundingBox()
+    assert.ok(emojiBounds && emojiBounds.width > 100, 'Overflow submenu must not collapse into the legacy 21px ellipsis')
+    assert.ok(emojiBounds.x >= 0 && emojiBounds.x + emojiBounds.width <= 321, 'Overflow submenu must fit the pane')
+    await page.keyboard.press('Escape')
+    await page.locator('.vmd-toolbar [data-type="more"]').click()
+    const moreMenu = page.locator('.vmd-toolbar [data-type="markdown-outline"]')
+    const menuBounds = await moreMenu.boundingBox()
+    assert.ok(menuBounds && menuBounds.width > 100)
+    assert.ok(menuBounds.x >= 0 && menuBounds.x + menuBounds.width <= 321)
+    await moreMenu.click()
+    await init('ir', 'light')
+    assert.equal(await page.locator('.vmd-toolbar-overflow').count(), 1, 'Theme rebuild must not duplicate overflow controls')
+    assert.deepEqual(errors, [])
+  } finally {
+    await browser.close()
+  }
+})

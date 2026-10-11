@@ -5,6 +5,7 @@ import 'jquery-confirm/css/jquery-confirm.css'
 
 import _ from 'lodash'
 import Vditor from 'vditor'
+import { scrollToHeading, publishOutline } from './headings'
 window.vscode =
   (window as any).acquireVsCodeApi && (window as any).acquireVsCodeApi()
 ;(window as any).global = window
@@ -16,6 +17,7 @@ declare global {
     vditor: Vditor
     vscode: any
     global: Window
+    followLinksOnClick: boolean
   }
 }
 
@@ -99,45 +101,9 @@ export function handleToolbarClick() {
   ).on('click', (e) => {
     setTimeout(() => {
       saveVditorOptions()
+      publishOutline()
     }, 500)
   })
-}
-
-/**
- * Approximates the GitHub-style heading slug so in-page `#anchor` links (e.g. a Table
- * of Contents) can be matched against the rendered heading text.
- */
-function slugifyHeading(text: string): string {
-  return text
-    .trim()
-    // Vditor's IR mode keeps the literal `#`/`##`/... marker as part of the heading's
-    // textContent, unlike the final rendered output, so strip it first.
-    .replace(/^#{1,6}\s*/, '')
-    .toLowerCase()
-    .replace(/[`*_~]/g, '')
-    .replace(/[^\p{L}\p{N}\- ]+/gu, '')
-    // GitHub's heading slugger replaces each space individually rather than collapsing
-    // runs of whitespace, so e.g. "Foo & Bar" (which becomes "foo  bar" once the "&" is
-    // stripped) turns into "foo--bar", not "foo-bar".
-    .replace(/ /g, '-')
-}
-
-/**
- * Scrolls to the heading matching an in-page `#anchor` link. Returns true if a match
- * was found and scrolled to.
- */
-function scrollToHeadingAnchor(fragment: string): boolean {
-  const target = decodeURIComponent(fragment).toLowerCase()
-  const headings = document.querySelectorAll(
-    '.vditor-reset h1, .vditor-reset h2, .vditor-reset h3, .vditor-reset h4, .vditor-reset h5, .vditor-reset h6'
-  )
-  for (const h of Array.from(headings)) {
-    if (slugifyHeading(h.textContent || '') === target) {
-      h.scrollIntoView({ block: 'start', behavior: 'smooth' })
-      return true
-    }
-  }
-  return false
 }
 
 /**
@@ -145,10 +111,17 @@ function scrollToHeadingAnchor(fragment: string): boolean {
  */
 export function fixLinkClick() {
   const openLink = (url: string) => {
-    vscode.postMessage({ command: 'open-link', href: url })
+    try {
+      if (url.startsWith('#')) scrollToHeading(url.slice(1))
+      else vscode.postMessage({ command: 'open-link', href: url })
+    } catch (error) {
+      vscode.postMessage({ command: 'error', content: `Cannot follow link "${url}": ${error}` })
+    }
   }
-  document.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement
+  window.addEventListener('click', (e) => {
+    if (!(e.target instanceof Element) || e.button !== 0) return
+    const target = e.target
+    if (!target.closest('.vditor-content')) return
     const link = target.closest('a')
     // Vditor's IR mode never renders a real `<a href>` for links: it always shows the
     // raw markdown syntax, with the url held in a `.vditor-ir__marker--link` marker
@@ -159,14 +132,15 @@ export function fixLinkClick() {
     const href = link?.getAttribute('href') || irLinkMarker?.textContent || undefined
 
     if (!href) return
-    e.preventDefault()
-    e.stopPropagation()
-    if (href.startsWith('#')) {
-      scrollToHeadingAnchor(href.slice(1))
+    if (e.altKey || (window.followLinksOnClick === false && !e.metaKey && !e.ctrlKey)) {
+      if (link) e.preventDefault()
+      e.stopImmediatePropagation()
       return
     }
+    e.preventDefault()
+    e.stopImmediatePropagation()
     openLink(href)
-  })
+  }, true)
   window.open = (url: string, ...args: any[]) => {
     openLink(url)
     return window

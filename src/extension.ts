@@ -1,6 +1,8 @@
 import * as vscode from 'vscode'
 import * as NodePath from 'path'
+import { MarkdownOutline } from './outline'
 const KeyVditorOptions = 'vditor.options'
+let outline: MarkdownOutline
 
 function debug(...args: any[]) {
   console.log(...args)
@@ -30,42 +32,33 @@ function isExternalReload(e: vscode.TextDocumentChangeEvent) {
  * Opens external URIs directly and resolves local links from the Markdown file.
  */
 async function openMarkdownLink(markdownFileUri: vscode.Uri, href: string) {
-  if (/^https?:\/\//.test(href)) {
-    await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(href))
-    return
-  }
-
-  let localUri: vscode.Uri | undefined
-
-  if (/^[a-zA-Z]:[\\/]/.test(href)) {
-    localUri = vscode.Uri.file(href)
-  } else if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) {
-    await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(href))
-    return
-  } else {
-    const targetPath = NodePath.resolve(
-      NodePath.dirname(markdownFileUri.fsPath),
-      href
-    )
-    localUri = vscode.Uri.file(targetPath)
-  }
-
-  let fileStat: vscode.FileStat
   try {
-    fileStat = await vscode.workspace.fs.stat(localUri)
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href) && !/^[a-zA-Z]:[\\/]/.test(href)) {
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.parse(href))
+      return
+    }
+    const hash = href.indexOf('#')
+    const path = hash < 0 ? href : href.slice(0, hash)
+    const fragment = hash < 0 ? '' : href.slice(hash + 1)
+    const localUri = vscode.Uri.file(NodePath.resolve(
+      NodePath.dirname(markdownFileUri.fsPath), decodeURIComponent(path)
+    ))
+    const fileStat = await vscode.workspace.fs.stat(localUri)
+    if (fileStat.type === vscode.FileType.Directory) {
+      await vscode.commands.executeCommand('revealInExplorer', localUri)
+    } else if (/\.(md|markdown)$/i.test(localUri.path) && fragment) {
+      await outline.open(localUri, fragment)
+    } else {
+      await vscode.commands.executeCommand('vscode.open', localUri)
+    }
   } catch (error) {
-    return
+    showError(`Cannot open link "${href}": ${error}`)
   }
-
-  if (fileStat.type === vscode.FileType.Directory) {
-    await vscode.commands.executeCommand('revealInExplorer', localUri)
-    return
-  }
-
-  await vscode.commands.executeCommand('vscode.open', localUri)
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  outline = new MarkdownOutline()
+  context.subscriptions.push(outline)
   // Register original command (used by context menu/shortcuts)
   context.subscriptions.push(
     vscode.commands.registerCommand(
@@ -98,19 +91,14 @@ export function activate(context: vscode.ExtensionContext) {
  * Manages cat coding webview panels
  */
 class EditorPanel {
-  /**
-   * Track the currently panel. Only allow a single panel to exist at a time.
-   */
-  public static currentPanel: EditorPanel | undefined
+  public static panelsByPath = new Map<string, EditorPanel>()
 
   public static readonly viewType = 'markdown-editor'
 
   /**
    * Remembers the last scroll position for each file, keyed by fsPath, so that
    * switching to another file and back doesn't reset the reading position.
-   * Shared across both the EditorPanel (singleton webview, disposed/recreated per
-   * file) and MarkdownEditorProvider (one webview per document via "Open With")
-   * entry points, since neither keeps the panel instance alive across a full close.
+   * Shared across command-mode and "Open With" editor entry points.
    */
   static _scrollPositions = new Map<string, number>()
 
@@ -140,27 +128,6 @@ class EditorPanel {
     const column = vscode.window.activeTextEditor
       ? vscode.window.activeTextEditor.viewColumn
       : undefined
-    // Known limitation: switching files disposes and recreates this panel (a brand
-    // new webview), which can trigger a VS Code platform-level transition where the
-    // new webview briefly renders at the wrong zoom level before VS Code's own
-    // zoom-sync (Electron webContents.setZoomFactor, applied outside this page's
-    // control) settles - see PR #166. Confirmed this is specific to that dispose+
-    // recreate transition, not "any new webview": the *first* panel ever opened in a
-    // session does not show it, only switching to a different file does. Reusing the
-    // same panel across file switches (updating its bound document in place, the
-    // same flash-free mechanism already used for theme changes) would likely avoid
-    // it, but requires also keeping <base href> (used to resolve relative image/file
-    // links) in sync with whichever file is currently bound instead of baking it into
-    // the HTML once at panel-creation time - deliberately not done here for now.
-    if (EditorPanel.currentPanel && uri !== EditorPanel.currentPanel?._uri) {
-      EditorPanel.currentPanel.dispose()
-    }
-    // If we already have a panel, show it.
-    if (EditorPanel.currentPanel) {
-      EditorPanel.currentPanel._panel.reveal(column)
-      EditorPanel.currentPanel._panel.webview.postMessage({ command: 'focus' })
-      return
-    }
     if (!vscode.window.activeTextEditor && !uri) {
       showError(`Did not open markdown file!`)
       return
@@ -186,6 +153,12 @@ class EditorPanel {
       return
     }
 
+    const existing = EditorPanel.panelsByPath.get(doc.uri.toString())
+    if (existing) {
+      existing._panel.reveal(column)
+      existing._panel.webview.postMessage({ command: 'focus' })
+      return
+    }
     // Otherwise, create a new panel.
     const panel = vscode.window.createWebviewPanel(
       EditorPanel.viewType,
@@ -194,13 +167,13 @@ class EditorPanel {
       EditorPanel.getWebviewOptions(uri)
     )
 
-    EditorPanel.currentPanel = new EditorPanel(
+    EditorPanel.panelsByPath.set(doc.uri.toString(), new EditorPanel(
       context,
       panel,
       extensionUri,
       doc,
       uri
-    )
+    ))
   }
 
   private static getFolders(): vscode.Uri[] {
@@ -254,7 +227,6 @@ class EditorPanel {
 
   static lineNumberScript = `<style>
 .vditor-ir .vditor-reset{padding-left:60px!important}
-.vditor-toolbar.vditor-toolbar--pin{padding-left:60px!important}
 #ln-gutter{position:fixed;width:32px;pointer-events:none;user-select:none;z-index:10;overflow:hidden;border-right:1px solid rgba(128,128,128,0.12)}
 #ln-gutter .ln{position:absolute;width:26px;text-align:right;font-size:11px;font-family:'Cascadia Code','Consolas',monospace;color:rgba(150,150,150,0.5);line-height:1}
 </style>
@@ -280,7 +252,6 @@ class EditorPanel {
       if(g)g.style.display=window.__lnEnabled?'':'none';
       var r=document.querySelector('.vditor-ir .vditor-reset');
       if(r)r.style.setProperty('padding-left',window.__lnEnabled?'60px':'35px','important');
-      if(tb)tb.style.setProperty('padding-left',window.__lnEnabled?'60px':'35px','important');
     };
     tb.appendChild(btn);
   }
@@ -378,6 +349,7 @@ class EditorPanel {
     // Set the webview's initial html content
 
     this._init()
+    this._disposables.push(outline.register(this._panel, this._document.uri))
 
     // Listen for when the panel is disposed
     // This happens when the user closes the panel or when the panel is closed programmatically
@@ -542,7 +514,9 @@ class EditorPanel {
   }
 
   public dispose() {
-    EditorPanel.currentPanel = undefined
+    if (this._disposed) return
+    this._disposed = true
+    EditorPanel.panelsByPath.delete(this._document.uri.toString())
 
     // Clean up our resources
     this._panel.dispose()
@@ -554,6 +528,7 @@ class EditorPanel {
       }
     }
   }
+  private _disposed = false
 
   private _init() {
     const webview = this._panel.webview
@@ -589,6 +564,7 @@ class EditorPanel {
     // const dir = NodePath.dirname(this._document.fileName)
     this._panel.webview.postMessage({
       command: 'update',
+      followLinksOnClick: EditorPanel.config.get<boolean>('followLinksOnClick') !== false,
       content: md,
       ...(props.type === 'init'
         ? { scrollTop: EditorPanel._scrollPositions.get(this._fsPath) || 0 }
@@ -664,6 +640,7 @@ class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel.title = NodePath.basename(uri.fsPath)
 
     const disposables: vscode.Disposable[] = []
+    disposables.push(outline.register(webviewPanel, uri))
     let isEditing = false
 
     // Update title to show edit status
@@ -679,6 +656,7 @@ class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     const updateWebview = (props: { type?: 'init' | 'update'; options?: any; theme?: 'dark' | 'light' } = {}) => {
       webviewPanel.webview.postMessage({
         command: 'update',
+        followLinksOnClick: EditorPanel.config.get<boolean>('followLinksOnClick') !== false,
         content: document.getText(),
         ...(props.type === 'init'
           ? { scrollTop: EditorPanel._scrollPositions.get(uri.fsPath) || 0 }
@@ -688,6 +666,14 @@ class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     // Listen for document close
+    vscode.window.onDidChangeActiveColorTheme(theme => {
+      updateWebview({
+        type: 'init',
+        options: EditorPanel.getVditorOptions(this.context),
+        theme: theme.kind === vscode.ColorThemeKind.Dark ? 'dark' : 'light',
+      })
+    }, null, disposables)
+
     vscode.workspace.onDidCloseTextDocument((e) => {
       if (e.fileName === uri.fsPath) {
         webviewPanel.dispose()

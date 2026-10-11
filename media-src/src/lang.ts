@@ -32,3 +32,10 @@ export const lang = (() => {
 export function t(msg: string) {
   return (Langs[lang] && Langs[lang][msg]) || Langs.en_US[msg]
 }
+
+const locales = { en_US: en, ja_JP: ja, ko_KR: ko, zh_CN: zh }
+export const i18n = { ...en, ...locales[lang] }
+import en from 'vditor/dist/js/i18n/en_US.js'
+import ja from 'vditor/dist/js/i18n/ja_JP.js'
+import ko from 'vditor/dist/js/i18n/ko_KR.js'
+import zh from 'vditor/dist/js/i18n/zh_CN.js'

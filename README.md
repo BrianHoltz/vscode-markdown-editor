@@ -23,6 +23,44 @@
 
 [https://marketplace.visualstudio.com/items?itemName=zaaack.markdown-editor](https://marketplace.visualstudio.com/items?itemName=zaaack.markdown-editor)
 
+## Local Markdown UX build
+
+The [BrianHoltz fork](https://github.com/BrianHoltz/vscode-markdown-editor), branch `brian/markdown-ux`, builds version `0.1.22-local.2` under the existing extension ID, `zaaack.markdown-editor`.
+
+- Vditor translations for supported editor locales are bundled with the extension; toolbar tooltips and submenu labels do not depend on CDN localization scripts.
+- **Markdown Outline** appears in the Explorer sidebar for both command-mode and "Open With" editors. It uses Vditor's Markdown parser, follows the heading hierarchy, updates after edits, and remains usable when focus moves to the sidebar. Clicking a heading scrolls the originating editor, including duplicate headings and headings containing inline formatting.
+- Plain clicks follow links; Option/Alt-click positions the caret for editing. Set `markdown-editor.followLinksOnClick` to `false` to require Cmd/Ctrl-click. Internal anchors scroll in place; relative Markdown links with fragments open the target in Markdown Editor and scroll after rendering.
+- The toolbar and Cmd/Ctrl+F share one search bar. Search works in instant-rendering, WYSIWYG, and source modes, including matches across inline formatting. Browser highlights do not modify Markdown or the editable DOM.
+- Command-mode editors retain separate panels for separate documents. Theme and link-color overrides are included in source.
+- The toolbar stays a compact single row. Less-used tools move into a keyboard-accessible `»` overflow tray as the pane narrows; essential controls remain visible longest. Submenus open below the tray without horizontal clipping. The adapter in `media-src/src/responsive-toolbar.ts` moves Vditor's existing elements rather than duplicating command implementations, using ResizeObserver for pane changes.
+
+VS Code's built-in Outline has no public provider API for custom webview editors. Markdown Outline is a separate supported TreeView in Explorer, not a replacement for the built-in view.
+
+### Build and install
+
+For another Mac, download the VSIX from [GitHub Releases](https://github.com/BrianHoltz/vscode-markdown-editor/releases), then use **Extensions: Install from VSIX** or `code --install-extension <downloaded-file.vsix> --force`. No build tools are required for VSIX installation.
+
+To work on the source:
+
+```sh
+git clone https://github.com/BrianHoltz/vscode-markdown-editor.git ~/src/vscode-markdown-editor
+cd ~/src/vscode-markdown-editor
+git switch brian/markdown-ux
+npx --yes pnpm@10.32.1 install --frozen-lockfile
+npx --yes pnpm@10.32.1 build
+npx --yes pnpm@10.32.1 --filter media-src exec tsc --noEmit
+npx --yes pnpm@10.32.1 exec playwright install chromium
+npx --yes pnpm@10.32.1 test
+npx --yes --package @vscode/vsce vsce package --no-dependencies --out markdown-editor-local.vsix
+code --install-extension markdown-editor-local.vsix --force
+```
+
+Reload VS Code with **Developer: Reload Window** after installation. Use the extension gear menu to disable auto-update for Markdown Editor if this local build should remain installed; a Marketplace update can replace it. Do not apply the legacy `patch-zaaack.py` script to this source build.
+
+### Porting upstream updates
+
+Keep `origin` pointed at the BrianHoltz fork and add upstream with `git remote add upstream https://github.com/zaaack/vscode-markdown-editor.git`. Fetch upstream and merge `upstream/main` into `brian/markdown-ux`, then rerun build, webview type checks, and tests before packaging a new local version. The browser test exercises toolbar layout at 240, 320, 450, 700, and 1200 pixels, including line-number toggling, keyboard traversal, submenu bounds, and theme rebuilds.
+
 ## Supported syntax
 
 [demo article](https://ld246.com/guide/markdown)

@@ -14,10 +14,12 @@ import { merge } from 'lodash'
 import Vditor from 'vditor'
 import { format } from 'date-fns'
 import 'vditor/dist/index.css'
-import { t, lang } from './lang'
+import { t, lang, i18n } from './lang'
 import { toolbar } from './toolbar'
 import { fixTableIr } from './fix-table-ir'
 import { initSearch } from './search'
+import { publishOutline, scrollToHeading } from './headings'
+import { initResponsiveToolbar } from './responsive-toolbar'
 import './main.css'
 
 // Set to true only for local debugging of scroll-position persistence; verbose and
@@ -162,6 +164,7 @@ function restoreScrollPosition(scrollTop: number) {
   }, POLL_MS)
 }
 
+let disposeToolbar: (() => void) | undefined
 function initVditor(msg) {
   console.log('msg', msg)
   // Hide the editor again for the duration of this (re)build - see main.css and the
@@ -190,6 +193,7 @@ function initVditor(msg) {
     defaultOptions.preview.theme = { current: 'light' }
   }
   if (window.vditor) {
+    disposeToolbar?.()
     vditor.destroy()
     window.vditor = null
   }
@@ -204,16 +208,19 @@ function initVditor(msg) {
     toolbar,
     toolbarConfig: { pin: true },
     ...defaultOptions,
+    i18n,
     after() {
       fixDarkTheme()
       handleToolbarClick()
       fixTableIr()
       fixPanelHover()
+      disposeToolbar = initResponsiveToolbar()
       vditor.focus()
       // Initialize search bar once (idempotent across vditor re-inits)
       if (!(window as any).__vmdSearch) {
         ;(window as any).__vmdSearch = initSearch()
       }
+      publishOutline()
       trackScrollPosition()
       restoreScrollPosition(msg.scrollTop)
       // Reveal the editor (see main.css) only once Vditor's own DOM/CSS has fully
@@ -227,6 +234,7 @@ function initVditor(msg) {
     input() {
       inputTimer && clearTimeout(inputTimer)
       inputTimer = setTimeout(() => {
+        publishOutline()
         vscode.postMessage({ command: 'edit', content: vditor.getValue() })
       }, 100)
     },
@@ -260,6 +268,7 @@ window.addEventListener('message', (e) => {
   // console.log('msg from vscode', msg)
   switch (msg.command) {
     case 'update': {
+      window.followLinksOnClick = msg.followLinksOnClick !== false
       if (msg.type === 'init') {
         if (msg.options && msg.options.useVscodeThemeColor) {
           document.body.setAttribute('data-use-vscode-theme-color', '1')
@@ -277,12 +286,21 @@ window.addEventListener('message', (e) => {
         console.log('initVditor')
       } else {
         vditor.setValue(msg.content)
+        publishOutline()
         console.log('setValue')
       }
       break
     }
     case 'focus': {
       vditor.focus()
+      break
+    }
+    case 'scroll-to-heading': {
+      try {
+        scrollToHeading(msg.fragment, msg.index)
+      } catch (error) {
+        vscode.postMessage({ command: 'error', content: `Cannot follow heading link: ${error}` })
+      }
       break
     }
     case 'uploaded': {

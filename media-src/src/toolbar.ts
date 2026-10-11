@@ -64,7 +64,7 @@ export const toolbar = [
 	{
 		name: 'find',
 		tipPosition: 's',
-		tip: 'Find (Ctrl+F)',
+		tip: /Mac/.test(navigator.platform) ? 'Find (Cmd+F)' : 'Find (Ctrl+F)',
 		icon: searchIcon,
 		click() {
 			;(window as any).__vmdSearch?.open()
@@ -79,10 +79,18 @@ export const toolbar = [
 			'both',
 			'code-theme',
 			'content-theme',
-			'outline',
+			{
+				name: 'markdown-outline',
+				tip: 'Show Markdown Outline',
+				icon: 'Show Markdown Outline',
+				click() {
+					vscode.postMessage({ command: 'show-outline' })
+				},
+			},
 			'preview',
 			{
 				name: 'copy-markdown',
+				tip: t('copyMarkdown'),
 				icon: t('copyMarkdown'),
 				async click() {
 					try {
@@ -101,6 +109,7 @@ export const toolbar = [
 			},
 			{
 				name: 'copy-html',
+				tip: t('copyHtml'),
 				icon: t('copyHtml'),
 				async click() {
 					try {
@@ -119,6 +128,7 @@ export const toolbar = [
 			},
 			{
 				name: 'reset-config',
+				tip: t('resetConfig'),
 				icon: t('resetConfig'),
 				async click() {
 					confirm(t('resetConfirm'), async () => {

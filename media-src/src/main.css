@@ -4,6 +4,97 @@ body {
   margin: 0;
   padding: 0;
 }
+.vmd-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  position: relative;
+  padding: 0 6px !important;
+  min-height: 34px;
+  --toolbar-height: 34px;
+}
+.vmd-toolbar.vditor-toolbar--pin {
+  position: sticky;
+}
+.vmd-toolbar > .vditor-toolbar__item,
+.vmd-toolbar-tray > .vditor-toolbar__item {
+  float: none;
+  flex: 0 0 28px;
+}
+.vmd-toolbar .vditor-toolbar__item > .vditor-tooltipped,
+.vmd-toolbar-toggle {
+  width: 28px;
+  height: 34px;
+  padding: 8px 5px;
+}
+.vmd-toolbar > .vditor-toolbar__divider,
+.vmd-toolbar > .vditor-toolbar__br {
+  display: none;
+}
+.vmd-toolbar #ln-toggle {
+  flex: 0 0 28px;
+  width: 28px;
+  margin: 0 !important;
+}
+.vmd-toolbar-overflow {
+  flex: 0 0 28px;
+  margin-left: auto;
+}
+.vmd-toolbar-overflow[hidden],
+.vmd-toolbar-tray[hidden] {
+  display: none;
+}
+.vmd-toolbar-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--toolbar-icon-color);
+  cursor: pointer;
+  font-size: 20px;
+}
+.vmd-toolbar-toggle:hover,
+.vmd-toolbar-toggle[aria-expanded="true"] {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15));
+}
+.vmd-toolbar button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, #007fd4);
+  outline-offset: -2px;
+}
+.vmd-toolbar-tray {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  width: min(336px, 100%);
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--toolbar-background-color);
+  box-shadow: var(--panel-shadow);
+  z-index: 4;
+}
+/* Submenus anchor to the tray, not its rightmost icon, so they fit narrow panes. */
+.vmd-toolbar-tray > .vditor-toolbar__item {
+  position: static;
+}
+.vmd-toolbar .vmd-toolbar-tray .vditor-panel {
+  top: 100%;
+  left: 0;
+  right: auto;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.vmd-toolbar .vditor-panel {
+  transform: none;
+  max-width: 320px;
+  max-height: none;
+  overflow: visible;
+  opacity: 1;
+}
+.vmd-toolbar .vditor-panel::after {
+  display: none;
+}
 html,
 body,
 #app {
@@ -19,6 +110,26 @@ body[data-use-vscode-theme-color="1"] .vditor {
   --panel-background-color: var(--vscode-editor-background);
   --toolbar-background-color: var(--vscode-editor-background);
   --textarea-background-color: var(--vscode-editor-background);
+  --toolbar-icon-color: var(--vscode-editor-foreground);
+  --toolbar-icon-hover-color: var(--vscode-textLink-foreground);
+}
+.vditor-reset table tr,
+.vditor-reset table td,
+.vditor-reset table th {
+  background-color: var(--textarea-background-color) !important;
+  border-color: var(--border-color) !important;
+}
+.vditor-reset table tbody tr:nth-child(2n),
+.vditor-reset table tbody tr:nth-child(2n) td {
+  background-color: var(--panel-background-color) !important;
+}
+.vditor-reset a,
+.vditor-ir__link {
+  color: var(--vscode-textLink-foreground) !important;
+}
+.vditor-reset a:hover,
+.vditor-ir__link:hover {
+  color: var(--vscode-textLink-activeForeground) !important;
 }
 /* fix font family */
 .vditor .vditor-reset {
@@ -46,10 +157,6 @@ body.vmd-table-nowrap .vditor-reset table td,
 body.vmd-table-nowrap .vditor-reset table th {
   white-space: nowrap;
   overflow-wrap: normal;
-}
-/* fix outline toolbar padding */
-.vditor-toolbar.vditor-toolbar--pin {
-  padding-left: 35px!important;
 }
 .vditor-ir pre.vditor-reset {
   position: relative;

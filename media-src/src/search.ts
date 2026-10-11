@@ -13,11 +13,9 @@ function escapeRegex(s: string): string {
 }
 
 function getEditorRoot(): Element | null {
-  return (
-    document.querySelector('.vditor-ir .vditor-reset') ||
-    document.querySelector('.vditor-wysiwyg .vditor-reset') ||
-    document.querySelector('.vditor-sv .vditor-reset')
-  )
+  const mode = vditor.getCurrentMode()
+  const container = document.querySelector(`.vditor-${mode}`)
+  return container?.querySelector('.vditor-reset') || container
 }
 
 function findAllRanges(query: string, caseSensitive: boolean): Range[] {
@@ -27,19 +25,33 @@ function findAllRanges(query: string, caseSensitive: boolean): Range[] {
   const flags = caseSensitive ? 'g' : 'gi'
   const regex = new RegExp(escapeRegex(query), flags)
   const ranges: Range[] = []
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement
+      if (parent?.closest('[class*="vditor-ir__marker"], .vditor-panel, script, style')) {
+        return NodeFilter.FILTER_REJECT
+      }
+      return NodeFilter.FILTER_ACCEPT
+    },
+  })
+  const nodes: { node: Text; start: number; end: number }[] = []
+  let text = ''
   while (walker.nextNode()) {
     const node = walker.currentNode as Text
-    const text = node.textContent || ''
-    regex.lastIndex = 0
-    let match: RegExpExecArray | null
-    while ((match = regex.exec(text)) !== null) {
-      const range = document.createRange()
-      range.setStart(node, match.index)
-      range.setEnd(node, match.index + match[0].length)
-      ranges.push(range)
-    }
+    const value = node.textContent || ''
+    nodes.push({ node, start: text.length, end: text.length + value.length })
+    text += value
+  }
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    const start = nodes.find(entry => entry.start <= match.index && entry.end > match.index)
+    const endOffset = match.index + match[0].length
+    const end = nodes.find(entry => entry.start < endOffset && entry.end >= endOffset)
+    if (!start || !end) continue
+    const range = document.createRange()
+    range.setStart(start.node, match.index - start.start)
+    range.setEnd(end.node, endOffset - end.start)
+    ranges.push(range)
   }
   return ranges
 }
@@ -48,13 +60,13 @@ function applyHighlights(ranges: Range[], activeIdx: number) {
   if (typeof CSS === 'undefined' || !CSS.highlights) return
 
   if (ranges.length > 0) {
-    CSS.highlights.set('vmd-search-result', new (window as any).Highlight(...ranges))
+    CSS.highlights.set('vmd-search-result', new Highlight(...ranges))
   } else {
     CSS.highlights.delete('vmd-search-result')
   }
 
   if (activeIdx >= 0 && activeIdx < ranges.length) {
-    CSS.highlights.set('vmd-search-current', new (window as any).Highlight(ranges[activeIdx]))
+    CSS.highlights.set('vmd-search-current', new Highlight(ranges[activeIdx]))
   } else {
     CSS.highlights.delete('vmd-search-current')
   }
@@ -192,20 +204,12 @@ export function initSearch() {
     }
   }, true)
 
-  // When editor content changes, re-run the search so highlight ranges stay valid
-  const observeRoot = () => {
-    const root = getEditorRoot()
-    if (!root) return
-
-    new MutationObserver(() => {
-      if (!isOpen || !input.value) return
-      if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(runSearch, 300)
-    }).observe(root, { childList: true, subtree: true, characterData: true })
-  }
-
-  // Delay observation until vditor has fully mounted
-  setTimeout(observeRoot, 1000)
+  // Watch the stable host so theme/mode changes cannot leave a stale observer.
+  new MutationObserver(() => {
+    if (!isOpen || !input.value) return
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(runSearch, 300)
+  }).observe(document.getElementById('app'), { childList: true, subtree: true, characterData: true })
 
   return { open, close }
 }
