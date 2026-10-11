@@ -38,8 +38,35 @@ export function initResponsiveToolbar(): () => void {
     else layout()
   })
   applyAppearance()
+  const tooltip = document.createElement('div')
+  tooltip.className = 'vmd-toolbar-tooltip'
+  tooltip.setAttribute('role', 'tooltip')
+  tooltip.hidden = true
+  document.body.appendChild(tooltip)
+  function hideTooltip() {
+    tooltip.hidden = true
+  }
+  function showTooltip(event: Event) {
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLElement>('button, [aria-label]') : null
+    if (!target || !toolbar.contains(target)) return
+    const label = target.getAttribute('aria-label') || target.title || target.textContent?.trim()
+    if (!label) return
+    tooltip.textContent = label
+    tooltip.hidden = false
+    const rect = target.getBoundingClientRect()
+    const bounds = tooltip.getBoundingClientRect()
+    tooltip.style.left = `${Math.max(4, Math.min(rect.left, window.innerWidth - bounds.width - 4))}px`
+    tooltip.style.top = `${Math.min(rect.bottom + 5, window.innerHeight - bounds.height - 4)}px`
+  }
+  toolbar.addEventListener('pointerover', showTooltip)
+  toolbar.addEventListener('focusin', showTooltip)
+  toolbar.addEventListener('pointerout', hideTooltip)
+  toolbar.addEventListener('focusout', hideTooltip)
+  toolbar.addEventListener('pointerdown', hideTooltip)
 
   function close(returnFocus = false) {
+    hideTooltip()
     tray.hidden = true
     toggle.setAttribute('aria-expanded', 'false')
     if (returnFocus) toggle.focus()
@@ -125,6 +152,12 @@ export function initResponsiveToolbar(): () => void {
     document.removeEventListener('pointerdown', outside, true)
     toolbar.removeEventListener('keydown', escape, true)
     visibility.remove()
+    tooltip.remove()
+    toolbar.removeEventListener('pointerover', showTooltip)
+    toolbar.removeEventListener('focusin', showTooltip)
+    toolbar.removeEventListener('pointerout', hideTooltip)
+    toolbar.removeEventListener('focusout', hideTooltip)
+    toolbar.removeEventListener('pointerdown', hideTooltip)
   }
 }
 import { applyAppearance, toggleAppearance } from './appearance'

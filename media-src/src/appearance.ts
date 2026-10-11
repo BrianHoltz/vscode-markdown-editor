@@ -9,7 +9,7 @@ let observer: MutationObserver | undefined
 export function applyAppearance(value: Partial<Appearance> = {}) {
   Object.assign(appearance, value)
   document.body.classList.toggle('vmd-toolbar-hidden', appearance.toolbarHidden)
-  document.body.classList.toggle('vmd-raw-html-hidden', appearance.rawHtmlHidden)
+  document.body.classList.toggle('vmd-raw-html-hidden', appearance.toolbarHidden || appearance.rawHtmlHidden)
   const toolbarButton = document.getElementById('vmd-toolbar-visibility')
   if (toolbarButton) {
     toolbarButton.title = appearance.toolbarHidden ? 'Show toolbar' : 'Hide toolbar'
