@@ -218,6 +218,8 @@ function initVditor(msg) {
     toolbar,
     toolbarConfig: { pin: true },
     ...defaultOptions,
+    // Override persisted CDN settings with the packaged runtime.
+    cdn: document.getElementById('app').dataset.vditorCdn || '../vendor/vditor',
     i18n,
     after() {
       fixDarkTheme()

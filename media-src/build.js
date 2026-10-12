@@ -1,5 +1,10 @@
 const fs = require('fs')
 const esbuild = require('esbuild')
+const path = require('path')
+
+// Vditor loads its parser and renderers dynamically. Ship them, never require a CDN.
+fs.cpSync(path.join(path.dirname(require.resolve('vditor/package.json')), 'dist'),
+  path.resolve(__dirname, '../media/vendor/vditor/dist'), { recursive: true })
 
 esbuild.build({
   entryPoints: ['src/main.ts'],

@@ -1,0 +1,15 @@
+const { test } = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+test('the packaged parser matches Vditor and both hosts supply a local runtime URL', () => {
+  const root = path.resolve(__dirname, '..')
+  const original = path.join(root, 'media-src/node_modules/vditor/dist/js/lute/lute.min.js')
+  const packaged = path.join(root, 'media/vendor/vditor/dist/js/lute/lute.min.js')
+  assert.deepEqual(fs.readFileSync(packaged), fs.readFileSync(original))
+  const host = fs.readFileSync(path.join(root, 'src/extension.ts'), 'utf8')
+  assert.equal((host.match(/data-vditor-cdn=/g) || []).length, 2)
+  const main = fs.readFileSync(path.join(root, 'media-src/src/main.ts'), 'utf8')
+  assert.ok(main.indexOf('cdn: document.getElementById') > main.indexOf('...defaultOptions,'))
+})

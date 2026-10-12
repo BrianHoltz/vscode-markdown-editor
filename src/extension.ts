@@ -651,7 +651,7 @@ class EditorPanel {
       `</style>
 			</head>
 			<body>
-				<div id="app"></div>
+				<div id="app" data-vditor-cdn="${toUri('media/vendor/vditor')}"></div>
 
 
 				${JsFiles.map((f) => `<script src="${f}"></script>`).join('\n')}
@@ -876,7 +876,7 @@ class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
       `</style>
 			</head>
 			<body>
-				<div id="app"></div>
+				<div id="app" data-vditor-cdn="${toUri('media/vendor/vditor')}"></div>
 
 
 				${JsFiles.map((f) => `<script src="${f}"></script>`).join('\n')}
