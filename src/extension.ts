@@ -1,6 +1,10 @@
 import * as vscode from 'vscode'
 import * as NodePath from 'path'
 import { MarkdownOutline } from './outline'
+import {
+  getActiveFileUriFromTab,
+  markdownEditorViewType,
+} from './activeFileContext'
 const KeyVditorOptions = 'vditor.options'
 const KeyAppearance = 'markdown-editor.appearance'
 let outline: MarkdownOutline
@@ -71,6 +75,36 @@ export function activate(context: vscode.ExtensionContext) {
     )
   )
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      'markdown-editor.addActiveFileToCopilot',
+      async () => {
+        const activeTab = vscode.window.tabGroups?.activeTabGroup.activeTab
+        const uri = activeTab
+          ? getActiveFileUriFromTab(activeTab, EditorPanel.activeDocumentUri())
+          : vscode.window.activeTextEditor?.document.uri
+        if (!uri || !['file', 'vscode-remote', 'untitled'].includes(uri.scheme)) {
+          await vscode.window.showInformationMessage(
+            'Focus a file tab before adding it to Copilot Chat.'
+          )
+          return
+        }
+        try {
+          await vscode.commands.executeCommand(
+            'workbench.action.chat.attachFile',
+            uri
+          )
+        } catch (error) {
+          showError(
+            `Could not add file to Copilot Chat: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        }
+      }
+    )
+  )
+
   // Register CustomTextEditorProvider (for "Open With" and default editor)
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
@@ -94,7 +128,16 @@ export function activate(context: vscode.ExtensionContext) {
 class EditorPanel {
   public static panelsByPath = new Map<string, EditorPanel>()
 
-  public static readonly viewType = 'markdown-editor'
+  public static readonly viewType = markdownEditorViewType
+
+  public static activeDocumentUri(): vscode.Uri | undefined {
+    for (const panel of this.panelsByPath.values()) {
+      if (panel._panel.active) {
+        return panel._document.uri
+      }
+    }
+    return undefined
+  }
 
   /**
    * Remembers the last scroll position for each file, keyed by fsPath, so that

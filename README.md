@@ -25,13 +25,14 @@
 
 ## Local Markdown UX build
 
-The [BrianHoltz fork](https://github.com/BrianHoltz/vscode-markdown-editor), branch `brian/markdown-ux`, builds version `0.1.22-local.5` under the existing extension ID, `zaaack.markdown-editor`.
+The [BrianHoltz fork](https://github.com/BrianHoltz/vscode-markdown-editor), branch `brian/markdown-ux`, builds version `0.1.22-local.6` under the existing extension ID, `zaaack.markdown-editor`.
 
 - Vditor translations for supported editor locales are bundled with the extension; toolbar tooltips and submenu labels do not depend on CDN localization scripts.
 - **Markdown Outline** appears in the Explorer sidebar for both command-mode and "Open With" editors. It uses Vditor's Markdown parser, follows the heading hierarchy, updates after edits, and remains usable when focus moves to the sidebar. Clicking a heading scrolls the originating editor, including duplicate headings and headings containing inline formatting.
 - Plain clicks follow links; Option/Alt-click positions the caret for editing. Set `markdown-editor.followLinksOnClick` to `false` to require Cmd/Ctrl-click. Internal anchors scroll in place; relative Markdown links with fragments open the target in Markdown Editor and scroll after rendering.
 - The toolbar and Cmd/Ctrl+F share one search bar. Search works in instant-rendering, WYSIWYG, and source modes, including matches across inline formatting. Browser highlights do not modify Markdown or the editable DOM.
 - Command-mode editors retain separate panels for separate documents. Theme and link-color overrides are included in source.
+- **Add Active File to Copilot Chat** (`⌃⌥⌘⇧C`) explicitly attaches the active text, custom-editor, or Markdown Editor webview tab to VS Code Chat through its native file-attachment action, including tabs whose file is not available through `activeTextEditor`.
 - The toolbar stays a compact single row. Less-used tools move into a keyboard-accessible `»` overflow tray as the pane narrows; essential controls remain visible longest. Submenus open below the tray without horizontal clipping. The adapter in `media-src/src/responsive-toolbar.ts` moves Vditor's existing elements rather than duplicating command implementations, using ResizeObserver for pane changes.
 - The small upper-right toolbar button hides or restores the toolbar without reserving a row when hidden. H1-H6 and other margin annotations and the line-number gutter hide with it; rich-editor side padding shrinks to 12px. Cmd/Ctrl+F still works. Showing the toolbar restores the normal gutter and annotations.
 - The toolbar's **Hide raw HTML markup** button suppresses HTML tag syntax and empty HTML-only rows in rich editing modes. Rendered HTML blocks, their visible text, and fenced HTML examples remain visible; source mode always shows the complete source. Named HTML anchors remain navigable even when their raw markup is hidden. To edit hidden tags, show raw HTML again or switch to source mode. These view-only toggles do not modify Markdown; preferences persist across editor reopening and are included in VS Code Settings Sync.
@@ -56,11 +57,11 @@ npx --yes pnpm@10.32.1 build
 npx --yes pnpm@10.32.1 --filter media-src exec tsc --noEmit
 npx --yes pnpm@10.32.1 exec playwright install chromium
 npx --yes pnpm@10.32.1 test
-npx --yes --package @vscode/vsce vsce package --no-dependencies --out markdown-editor-0.1.22-local.5.vsix
+npx --yes --package @vscode/vsce vsce package --no-dependencies --out markdown-editor-0.1.22-local.6.vsix
 STAMP=$(date "+%Y%m%d.%a.%H%M")
-OUT="$HOME/Downloads/markdown-editor-0.1.22-local.5-$STAMP-darkcode.vsix"
-cp -p markdown-editor-0.1.22-local.5.vsix "$OUT"
-cmp markdown-editor-0.1.22-local.5.vsix "$OUT"
+OUT="$HOME/Downloads/markdown-editor-0.1.22-local.6-$STAMP-copilot.vsix"
+cp -p markdown-editor-0.1.22-local.6.vsix "$OUT"
+cmp markdown-editor-0.1.22-local.6.vsix "$OUT"
 code --install-extension "$OUT" --force
 ```
 
