@@ -33,12 +33,13 @@ test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async 
     await page.addStyleTag({ path: path.resolve(__dirname, '../media/dist/main.css') })
     await page.addScriptTag({ path: path.resolve(__dirname, '../media/dist/main.js') })
     const markdown = '# Foo & Bar\n\nFind **across** formatting.\n\n[Jump](#foo--bar-1)\n\n[Other](other.md#target)\n\n[Web](https://example.com)\n\n## Foo & Bar\n\n### Café 中文\n\n## Heading with [link](https://example.com)\n\nSetext heading\n--------------\n\n```md\n# Not a heading\n```\n'
-    async function init(mode = 'ir', theme = 'light', appearance = { toolbarHidden: false, rawHtmlHidden: false }, content = markdown) {
-      await page.evaluate(({ content, mode, theme, appearance }) => {
+    async function init(mode = 'ir', theme = 'light', appearance = { toolbarHidden: false, rawHtmlHidden: false }, content = markdown, codeTheme) {
+      await page.evaluate(({ content, mode, theme, appearance, codeTheme }) => {
         document.body.removeAttribute('data-vmd-ready')
         window.postMessage({ command: 'update', type: 'init', content,
-          options: { mode }, theme, followLinksOnClick: true, appearance }, '*')
-      }, { content, mode, theme, appearance })
+          options: { mode, ...(codeTheme ? { preview: { hljs: { style: codeTheme } } } : {}) },
+          theme, followLinksOnClick: true, appearance }, '*')
+      }, { content, mode, theme, appearance, codeTheme })
       await page.waitForSelector('body[data-vmd-ready="1"]')
     }
     await init()
@@ -103,6 +104,17 @@ test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async 
       assert.equal(await page.locator('#vmd-search-bar').getAttribute('aria-hidden'), 'true')
     }
     await init('ir', 'dark')
+    assert.equal(await page.evaluate(() => vditor.vditor.options.preview.hljs.style), 'github-dark')
+    const darkCodeStyles = await page.locator('.vditor-ir .vditor-reset pre > code').first().evaluate(element => {
+      const style = getComputedStyle(element)
+      return { backgroundColor: style.backgroundColor, backgroundImage: style.backgroundImage }
+    })
+    assert.equal(darkCodeStyles.backgroundColor, 'rgb(30, 30, 30)')
+    assert.equal(darkCodeStyles.backgroundImage, 'none')
+    await init('ir', 'light')
+    assert.equal(await page.evaluate(() => vditor.vditor.options.preview.hljs.style), 'github')
+    await init('ir', 'dark', undefined, markdown, 'atom-one-light')
+    assert.equal(await page.evaluate(() => vditor.vditor.options.preview.hljs.style), 'atom-one-light')
     await page.locator('.vditor-toolbar [data-type="find"]').click()
     await page.locator('#vmd-search-input').fill('Café')
     assert.equal(await page.locator('#vmd-search-count').textContent(), '1/1')

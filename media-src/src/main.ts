@@ -193,6 +193,15 @@ function initVditor(msg) {
     defaultOptions.preview = defaultOptions.preview || {}
     defaultOptions.preview.theme = { current: 'light' }
   }
+  if (msg.theme) {
+    const codeTheme = defaultOptions.preview.hljs?.style ?? 'github'
+    if (codeTheme === 'github' || codeTheme === 'github-dark') {
+      defaultOptions.preview.hljs = {
+        ...defaultOptions.preview.hljs,
+        style: msg.theme === 'dark' ? 'github-dark' : 'github',
+      }
+    }
+  }
   if (window.vditor) {
     disposeToolbar?.()
     vditor.destroy()
