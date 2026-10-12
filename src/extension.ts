@@ -148,7 +148,7 @@ class EditorPanel {
 
   /**
    * Hides #app until BOTH of these are true: (a) the external main.css has actually
-   * finished loading (its <link>'s onload sets data-vmd-css-loaded="1" - see below),
+   * finished loading (its <link>'s onload sets data-vmd-css-loaded="1" on <html> - see below),
    * and (b) main.ts confirms Vditor has fully finished building its UI and applying
    * the saved scroll position (sets data-vmd-ready="1" - see main.ts). Both
    * conditions are necessary: a script's execution is not guaranteed to wait for an
@@ -160,7 +160,7 @@ class EditorPanel {
    * rather than placed in main.css itself, since that stylesheet is exactly the
    * thing this rule needs to not depend on to take effect.
    */
-  static appVisibilityCss = `#app{opacity:0}body[data-vmd-ready="1"][data-vmd-css-loaded="1"] #app{opacity:1}`
+  static appVisibilityCss = `#app{opacity:0}html[data-vmd-css-loaded="1"] body[data-vmd-ready="1"] #app{opacity:1}`
 
   private _disposables: vscode.Disposable[] = []
 
@@ -643,7 +643,7 @@ class EditorPanel {
 
 				<style>${EditorPanel.appVisibilityCss}</style>
 
-				${CssFiles.map((f) => `<link href="${f}" rel="stylesheet" onload="document.body.setAttribute('data-vmd-css-loaded','1')" onerror="document.body.setAttribute('data-vmd-css-loaded','1')">`).join('\n')}
+				${CssFiles.map((f) => `<link href="${f}" rel="stylesheet" onload="document.documentElement.setAttribute('data-vmd-css-loaded','1')" onerror="document.documentElement.setAttribute('data-vmd-css-loaded','1')">`).join('\n')}
 
 				<title>markdown editor</title>
         <style>` +
@@ -868,7 +868,7 @@ class MarkdownEditorProvider implements vscode.CustomTextEditorProvider {
 
 				<style>${EditorPanel.appVisibilityCss}</style>
 
-				${CssFiles.map((f) => `<link href="${f}" rel="stylesheet" onload="document.body.setAttribute('data-vmd-css-loaded','1')" onerror="document.body.setAttribute('data-vmd-css-loaded','1')">`).join('\n')}
+				${CssFiles.map((f) => `<link href="${f}" rel="stylesheet" onload="document.documentElement.setAttribute('data-vmd-css-loaded','1')" onerror="document.documentElement.setAttribute('data-vmd-css-loaded','1')">`).join('\n')}
 
 				<title>markdown editor</title>
         <style>` +
