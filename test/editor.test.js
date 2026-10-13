@@ -5,7 +5,11 @@ const path = require('path')
 const { chromium } = require('playwright')
 
 test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async () => {
-  const browser = await chromium.launch()
+  const launchOptions = process.env.CHROME_CANARY_PATH
+    ? { executablePath: process.env.CHROME_CANARY_PATH } : {}
+  const browser = process.env.CHROME_AGENT_PROFILE
+    ? await chromium.launchPersistentContext(process.env.CHROME_AGENT_PROFILE, launchOptions)
+    : await chromium.launch(launchOptions)
   try {
     const page = await browser.newPage()
     const errors = []
@@ -13,7 +17,7 @@ test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async 
     const vditorRoot = path.resolve(__dirname, '../media-src/node_modules/vditor')
     await page.route('**/*', route => {
       const url = new URL(route.request().url())
-      if (url.hostname === 'markdown-editor.test') {
+      if (url.hostname === 'markdown-editor.test' && url.pathname === '/') {
         return route.fulfill({ contentType: 'text/html', body: '<html><head></head><body><div id="app"></div></body></html>' })
       }
       const at = url.pathname.indexOf('/dist/')
