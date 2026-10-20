@@ -1,5 +1,8 @@
 import './preload'
 
+const { fixListBackspace } = require('./list-backspace')
+document.addEventListener('keydown', fixListBackspace, true)
+
 import {
   fileToBase64,
   fixCut,
@@ -217,6 +220,7 @@ function initVditor(msg) {
     cache: { enable: false },
     toolbar,
     toolbarConfig: { pin: true },
+    customWysiwygToolbar() {},
     ...defaultOptions,
     // Override persisted CDN settings with the packaged runtime.
     cdn: document.getElementById('app').dataset.vditorCdn || '../vendor/vditor',

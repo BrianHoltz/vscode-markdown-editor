@@ -7,11 +7,25 @@ const { chromium } = require('playwright')
 test('Real Vditor toolbar, menus, outline, links, and non-mutating find', async () => {
   const launchOptions = process.env.CHROME_CANARY_PATH
     ? { executablePath: process.env.CHROME_CANARY_PATH } : {}
-  const browser = process.env.CHROME_AGENT_PROFILE
+  const browser = process.env.MARKDOWN_TEST_TARGET
+    ? await chromium.connectOverCDP('http://localhost:9222')
+    : process.env.CHROME_AGENT_PROFILE
     ? await chromium.launchPersistentContext(process.env.CHROME_AGENT_PROFILE, launchOptions)
     : await chromium.launch(launchOptions)
   try {
-    const page = await browser.newPage()
+    let page
+    if (process.env.MARKDOWN_TEST_TARGET) {
+      const context = browser.contexts()[0]
+      for (const candidate of context.pages()) {
+        const session = await context.newCDPSession(candidate)
+        const { targetInfo } = await session.send('Target.getTargetInfo')
+        await session.detach()
+        if (targetInfo.targetId === process.env.MARKDOWN_TEST_TARGET) page = candidate
+      }
+      assert.ok(page, 'Owned safe-browse target must exist')
+    } else {
+      page = await browser.newPage()
+    }
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
     const vditorRoot = path.resolve(__dirname, '../media-src/node_modules/vditor')
